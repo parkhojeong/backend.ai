@@ -31,7 +31,12 @@ from ai.backend.manager.models.rbac_models.permission.object_permission import O
 from ai.backend.manager.models.rbac_models.permission.permission import PermissionRow
 from ai.backend.manager.models.rbac_models.role import RoleRow
 from ai.backend.manager.models.rbac_models.user_role import UserRoleRow
-from ai.backend.manager.repositories.base.creator import Creator, execute_creator
+from ai.backend.manager.repositories.base.creator import (
+    BulkCreator,
+    Creator,
+    execute_bulk_creator,
+    execute_creator,
+)
 from ai.backend.manager.repositories.base.rbac.entity_creator import (
     RBACEntityCreator,
     execute_rbac_entity_creator,
@@ -40,6 +45,7 @@ from ai.backend.manager.repositories.permission_controller.creators import (
     AssociationScopesEntitiesCreatorSpec,
     ObjectPermissionCreatorSpec,
     RoleCreatorSpec,
+    UserRoleCreatorSpec,
 )
 
 log = BraceStyleAdapter(logging.getLogger(__name__))
@@ -129,6 +135,64 @@ class RoleManager:
 
     async def map_user_to_role(self, db_session: SASession, creator: Creator[UserRoleRow]) -> None:
         await execute_creator(db_session, creator)
+
+    async def assign_auto_assign_roles(
+        self,
+        db_session: SASession,
+        user_ids: Iterable[uuid.UUID],
+        scope_id: ScopeId,
+    ) -> None:
+        """Map the given users to every active ``auto_assign`` role bound to ``scope_id``.
+
+        Roles bound to the scope are located via the scope-entity association
+        (``association_scopes_entities`` with ``entity_type == ROLE``). Only
+        active roles flagged ``auto_assign`` are granted. Already-mapped
+        (user, role) pairs are filtered out to avoid unique-constraint conflicts.
+        """
+        user_id_list = list(user_ids)
+        if not user_id_list:
+            return
+
+        role_ids = (
+            await db_session.scalars(
+                sa.select(RoleRow.id)
+                .join(
+                    AssociationScopesEntitiesRow,
+                    sa.cast(AssociationScopesEntitiesRow.entity_id, sa.String)
+                    == sa.cast(RoleRow.id, sa.String),
+                )
+                .where(
+                    AssociationScopesEntitiesRow.scope_type == scope_id.scope_type,
+                    AssociationScopesEntitiesRow.scope_id == scope_id.scope_id,
+                    AssociationScopesEntitiesRow.entity_type == EntityType.ROLE,
+                    RoleRow.auto_assign.is_(True),
+                    RoleRow.status == RoleStatus.ACTIVE,
+                )
+            )
+        ).all()
+        if not role_ids:
+            return
+
+        existing_pairs = set(
+            (
+                await db_session.execute(
+                    sa.select(UserRoleRow.user_id, UserRoleRow.role_id).where(
+                        UserRoleRow.user_id.in_(user_id_list),
+                        UserRoleRow.role_id.in_(role_ids),
+                    )
+                )
+            ).all()
+        )
+
+        specs = [
+            UserRoleCreatorSpec(user_id=user_id, role_id=role_id)
+            for user_id in user_id_list
+            for role_id in role_ids
+            if (user_id, role_id) not in existing_pairs
+        ]
+        if not specs:
+            return
+        await execute_bulk_creator(db_session, BulkCreator(specs=specs))
 
     async def map_entity_to_scope(
         self,
