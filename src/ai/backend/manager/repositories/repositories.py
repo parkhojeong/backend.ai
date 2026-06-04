@@ -49,6 +49,7 @@ from ai.backend.manager.repositories.prometheus_query_preset import (
 from ai.backend.manager.repositories.prometheus_query_preset_category.repositories import (
     PrometheusQueryPresetCategoryRepositories,
 )
+from ai.backend.manager.repositories.replica_group.repositories import ReplicaGroupRepositories
 from ai.backend.manager.repositories.reservoir_registry.repositories import (
     ReservoirRegistryRepositories,
 )
@@ -105,6 +106,7 @@ class Repositories:
     project_resource_policy: ProjectResourcePolicyRepositories
     prometheus_query_preset: PrometheusQueryPresetRepositories
     prometheus_query_preset_category: PrometheusQueryPresetCategoryRepositories
+    replica_group: ReplicaGroupRepositories
     reservoir_registry: ReservoirRegistryRepositories
     resource_preset: ResourcePresetRepositories
     resource_slot: ResourceSlotRepositories
@@ -157,6 +159,7 @@ class Repositories:
         prometheus_query_preset_category_repositories = (
             PrometheusQueryPresetCategoryRepositories.create(args)
         )
+        replica_group_repositories = ReplicaGroupRepositories.create(args)
         reservoir_registry_repositories = ReservoirRegistryRepositories.create(args)
         resource_preset_repositories = ResourcePresetRepositories.create(args)
         resource_slot_repositories = ResourceSlotRepositories.create(args)
@@ -206,6 +209,7 @@ class Repositories:
             project_resource_policy=project_resource_policy_repositories,
             prometheus_query_preset=prometheus_query_preset_repositories,
             prometheus_query_preset_category=prometheus_query_preset_category_repositories,
+            replica_group=replica_group_repositories,
             reservoir_registry=reservoir_registry_repositories,
             resource_preset=resource_preset_repositories,
             resource_slot=resource_slot_repositories,
